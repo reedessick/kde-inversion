@@ -1,0 +1,30 @@
+#!/usr/bin/env python
+
+__usage__ = "investigate [--options]"
+__doc__ = "run the playground investigation for kde-inversion sanity"
+__author__ = "Reed Essick (reed.essick@ligo.org)"
+
+#-------------------------------------------------
+
+from optparse import OptionParser
+
+from kde_inv import kde_inv
+
+#-------------------------------------------------
+
+parser = OptionParser(usage=__usage__, description=__doc__)
+
+parser.add_option('-v', '--verbose', default=False, action='store_true')
+
+opts, args = parser.parse_args()
+
+#-------------------------------------------------
+
+raise NotImplementedError, '''
+sample from p(A) to get a large number of samples
+compute B_i=mapA2B(A_i) for each sample -> samples from p(B)
+estimate optimal bandwidth for KDE using samples from p(B)
+    look for convergence as the number of samples grows...
+try to recover a distribution over A assuming L(data|B)~constant
+    should reproduce p(A), compare with kde_inv.kldiv
+'''
