@@ -117,5 +117,14 @@ try to recover a distribution over A assuming L(data|B)~constant
 raise NotImplementedError, '''\
 implement some non-trivial likelihood over B and infer the posterior over A
     try a relatively tight Gaussian in B as the likelihood -> should pick out a sinusoidal region of A-space
+    sample from this, don't use the analytic result
     compare this to the posterior achieved via direct sampling (grid based? MCMC?)
+'''
+
+#------------------------
+
+### implement some non-trivial posterior samples over B and infer the posterior over A
+raise NotImplementedError, '''\
+sample from some non-trivial posterior and then recover p(A|data) from those samples
+    demonstrating this functionality and scalability should serve as a sufficient proof-of-concept
 '''
