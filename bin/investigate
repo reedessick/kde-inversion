@@ -6,6 +6,14 @@ __author__ = "Reed Essick (reed.essick@ligo.org)"
 
 #-------------------------------------------------
 
+import os
+
+import numpy as np
+
+import matplotlib
+matplotlib.use("Agg")
+from matplotlib import pyplot as plt
+
 from optparse import OptionParser
 
 from kde_inv import kde_inv
@@ -16,15 +24,98 @@ parser = OptionParser(usage=__usage__, description=__doc__)
 
 parser.add_option('-v', '--verbose', default=False, action='store_true')
 
+parser.add_option('-n', '--num-samples', default=1000, type='int',
+    help='DEFAULT=1000')
+
+parser.add_option('-o', '--output-dir', default='.', type='string')
+parser.add_option('-t', '--tag', default='', type='string')
+
 opts, args = parser.parse_args()
+
+if opts.tag:
+    opts.tag = "_"+opts.tag
+
+if not os.path.exists(opts.output_dir):
+    os.makedirs(opts.output_dir)
 
 #-------------------------------------------------
 
-raise NotImplementedError, '''
-sample from p(A) to get a large number of samples
-compute B_i=mapA2B(A_i) for each sample -> samples from p(B)
-estimate optimal bandwidth for KDE using samples from p(B)
-    look for convergence as the number of samples grows...
+### sample from p(A)
+if opts.verbose:
+    print('drawing %d samples from p(A)'%opts.num_samples)
+A = kde_inv.drawA(size=opts.num_samples)
+
+# generate figure
+fig = plt.figure()
+ax = fig.gca()
+
+ax.scatter(A[0], A[1], alpha=0.25, s=1)
+ax.set_xlabel('A[0]')
+ax.set_ylabel('A[1]')
+
+ax.set_xlim(xmin=0, xmax=1)
+ax.set_ylim(ymin=0, ymax=1)
+
+ax.grid(True, which='both')
+
+figname = "%s/samples_A%s.png"%(opts.output_dir, opts.tag)
+if opts.verbose:
+    print(figname)
+fig.savefig(figname)
+plt.close(fig)
+
+#------------------------
+
+### compute values of B
+if opts.verbose:
+    print('computing B=mapA2B(A)')
+B = kde_inv.mapA2B(A)
+
+# generate histogram
+fig = plt.figure()
+ax = fig.gca()
+
+ax.hist(B, bins=int(opts.num_samples**0.5), histtype='step', weights=np.ones_like(B, dtype=float)/opts.num_samples)
+ax.set_xlabel('B')
+ax.set_ylabel('fraction of samples')
+
+ax.set_xlim(xmin=0, xmax=1)
+
+ax.grid(True, which='both')
+
+figname = '%s/histogram_B%s.png'%(opts.output_dir, opts.tag)
+if opts.verbose:
+    print(figname)
+fig.savefig(figname)
+plt.close(fig)
+
+#------------------------
+
+### find optimal bandwidth
+if opts.verbose:
+    print('finding optimal bandwidth for KDE estimate of p(B)')
+bandwidth = kde_inv.optimizeBandwidth(B)
+if opts.verbose:
+    print('    bandwidth = %.6e'%bandwidth)
+
+### FIXME: 
+###     look for convergence as the number of samples grows...
+###     perhaps just repeat this in a loop adding starting with 10 samples and scaling up to all samples in B
+###     depending on how quickly the optimization runs, do this for each sample, or only ever 10 samples? logarithmically spaced?
+
+#------------------------
+
+### try to recover p(A) via kde_inversion
+raise NotImplementedError, '''\
 try to recover a distribution over A assuming L(data|B)~constant
     should reproduce p(A), compare with kde_inv.kldiv
+'''
+
+#------------------------
+
+### implement some non-trivial likelihood over B and infer the posterior over A
+raise NotImplementedError, '''\
+implement some non-trivial likelihood over B and infer the posterior over A
+    try a relatively tight Gaussian in B as the likelihood -> should pick out a sinusoidal region of A-space
+    compare this to the posterior achieved via direct sampling (grid based? MCMC?)
 '''
