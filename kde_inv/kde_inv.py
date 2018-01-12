@@ -64,10 +64,45 @@ def logleave1outLikelihood(bandwidth, samples, num_test, num_trials=10):
 
     loglike /= num_trials
 
-    print 'bandwidth : %.6e'%bandwidth
-    print '    -logLike : %.6e'%loglike
-
     return loglike
+
+def fast_logleave1outLikelihood(bandwidth, samples, num_test, num_trials=10):
+    N = len(samples)
+    sample_inds = np.arange(N)
+    ones_N = np.ones_like(samples, dtype=float)
+    ones_T = np.ones(num_trials, dtype=float)
+
+    ### compute all kernals between samples
+    kernals = (2*np.pi*bandwidth)**-0.5 * np.exp(-0.5*(np.outer(samples, ones_N) - np.outer(ones_N, samples))**2/bandwidth)
+
+    ### randomly partition these into test and train sets
+    train = np.ones((num_trials,N), dtype=bool) ### shape : (num_trials, N)
+    inds = np.random.randint(0, N, size=num_trials*num_test).reshape((num_trials, num_test))
+    for k in xrange(num_trials):
+        train[k][inds[k]] = False ### select the subset for testing
+    num_train = np.outer(np.sum(train, axis=1), ones_N) ### shape : (num_trials, N)
+
+    test = np.logical_not(train)
+    num_test = np.sum(test, axis=1) ### shape : (num_trials,)
+
+    ### set up indicator function -> set only those elements that are included to non-zero values
+    training = np.zeros((num_trials, N, N), dtype=float) ### if not selected, this element should just be zero
+    for k in xrange(num_trials):
+        for i in sample_inds[test[k]]:
+            training[k][i][train[k]] = kernals[i][train[k]]
+
+    ### set up the summation over train samples
+    summed_over_train = np.log(np.sum(training, axis=2)) - np.log(num_train)
+
+    ### sum over only stuff in test set
+    for k in xrange(num_trials):
+        summed_over_train[k][train[k]] = 0 ### zero out the stuff that isn't in the test set
+    summed_over_test  = np.sum(summed_over_train, axis=1)/num_test
+
+    ### average over trials
+    summed_over_trials = np.sum(summed_over_test, axis=0)/num_trials
+
+    return -summed_over_trials ### return the negative because we want to minimize this...
 
 def grad_logleave1outLikelihood(bandwidth, samples, num_test, num_trials=10):
     """
@@ -87,10 +122,13 @@ def grad_logleave1outLikelihood(bandwidth, samples, num_test, num_trials=10):
 
     grad_loglike /= num_trials
 
-    print 'bandwidth : %.6e'%bandwidth
-    print '    -grad_loglike : %.6e'%grad_loglike
-
     return grad_loglike
+
+def fast_grad_logleave1outLikelihood(bandwidth, samples, num_test, num_trials=10):
+    """
+    a version of grad_logleave2outLikelihood that uses numpy arrays to try to speed up the calculation
+    """
+    raise NotImplementedError
 
 def logkde_pdf(B, samples, bandwidth):
     """
