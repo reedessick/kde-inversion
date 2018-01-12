@@ -66,6 +66,8 @@ def logleave1outLikelihood(bandwidth, samples, num_test, num_trials=10):
 
     return loglike
 
+'''
+### DEPRECATED: this is actually slower than logleave1outLikelihood for reasonable sample sizes
 def fast_logleave1outLikelihood(bandwidth, samples, num_test, num_trials=10):
     N = len(samples)
     sample_inds = np.arange(N)
@@ -103,6 +105,7 @@ def fast_logleave1outLikelihood(bandwidth, samples, num_test, num_trials=10):
     summed_over_trials = np.sum(summed_over_test, axis=0)/num_trials
 
     return -summed_over_trials ### return the negative because we want to minimize this...
+'''
 
 def grad_logleave1outLikelihood(bandwidth, samples, num_test, num_trials=10):
     """
