@@ -55,7 +55,7 @@ def likelihood_plot(samples, bandwidths, num_test, num_trials, num_plot=101, ver
     for ax in [ax_logL, ax_gradlogL, ax_hist]:
         ax.grid(True, which='both')
 
-    xlim = min(bandwidths), max(bandwidths)
+    xlim = min(bandwidths)/1.1, max(bandwidths)*1.1
     for ax in [ax_logL, ax_gradlogL]:
         ax.set_xlim(xlim)
 
