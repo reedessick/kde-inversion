@@ -3,8 +3,14 @@ __author__ = "Reed Essick (reed.essick@ligo.org)"
 
 #-------------------------------------------------
 
+import os
+
 import numpy as np
 from scipy.optimize import minimize
+
+import matplotlib
+matplotlib.use("Agg")
+from matplotlib import pyplot as plt
 
 #-------------------------------------------------
 
@@ -23,6 +29,68 @@ def mapA2B(A):
     for A[0], A[1] \in [0, 1]
     """
     return A[0] + np.cos(4*np.pi*A[1])**2
+
+#-------------------------------------------------
+
+def likelihood_plot(samples, bandwidths, num_test, num_trials, num_plot=101, verbose=False):
+    """
+    returns a figure showing the estimates for likelihood, grad_likelihood, and KDE representations of the histograms
+    """
+    ### set up figures and axes
+    fig = plt.figure()
+    ax_logL = plt.subplot(2, 2, 1)
+    ax_gradlogL = plt.subplot(2, 2, 3)
+    ax_hist = plt.subplot(1, 2, 2)
+
+    ax_logL.set_xlabel('bandwidth')
+    ax_logL.set_ylabel('logL')
+
+    ax_gradlogL.set_xlabel('bandwidth')
+    ax_gradlogL.set_ylabel('d(logL)/d(logbandwidth)')
+
+    ax_hist.set_xlabel('B')
+    ax_hist.set_ylabel('p(B)')
+    ax_hist.set_xlim(xmin=0, xmax=2)
+
+    for ax in [ax_logL, ax_gradlogL, ax_hist]:
+        ax.grid(True, which='both')
+
+    xlim = min(bandwidths), max(bandwidths)
+    for ax in [ax_logL, ax_gradlogL]:
+        ax.set_xlim(xlim)
+
+    ### generate histogram over samples
+    N = len(samples)
+    ax_hist.hist(samples, bins=int(N**0.5), histtype='step', normed=True, label='samples', color='k', linewidth=2)
+
+    ### iterate over bandwidths, adding to plots as we go
+    b = np.linspace(0, 2, num_plot)
+    for bandwidth in bandwidths:
+        if verbose:
+            print('bandwidth=%.3e'%bandwidth)
+            print('    computing logL')
+        logL, sigma_logL = logleave1outLikelihood(bandwidth, samples, num_test, num_trials, return_std=True)
+
+        if verbose:
+            print('    computing grad_logL')
+        gradlogL, sigma_gradlogL = grad_logleave1outLikelihood(bandwidth, samples, num_test, num_trials, return_std=True)
+
+        if verbose:
+            print('    plotting')
+        color = ax_logL.semilogx([bandwidth]*2, [logL-sigma_logL, logL+sigma_logL], alpha=0.5)[0].get_color()
+        ax_logL.semilogx(bandwidth, logL, marker='o', color=color)
+
+        ax_gradlogL.semilogx([bandwidth]*2, [bandwidth*(gradlogL-sigma_gradlogL), bandwidth*(gradlogL+sigma_gradlogL)], alpha=0.5, color=color)
+        ax_gradlogL.semilogx(bandwidth, gradlogL*bandwidth, marker='o', color=color)
+
+        ax_hist.plot(b, np.exp(logkde_pdf(b, samples, bandwidth)), label='bandwidth=%.3e'%bandwidth, alpha=0.5, color=color)
+
+        fig.savefig('tmp.png')
+
+#    ax_hist.legend(loc='best')
+    os.remove('tmp.png')
+
+    return fig
 
 def optimizeBandwidth(samples, num_test=100, num_trials=10, rtol=1e-3, method='Newton-CG'):
     """
@@ -46,25 +114,25 @@ def optimizeBandwidth(samples, num_test=100, num_trials=10, rtol=1e-3, method='N
     assert res.success, 'minimization did not complete succesfully!'
     return res.x ### return the optimal bandwidth
 
-def logleave1outLikelihood(bandwidth, samples, num_test, num_trials=10):
+def logleave1outLikelihood(bandwidth, samples, num_test, num_trials=10, return_std=False):
     """
     determine the likelihood of observing samples with Gaussian KDE using bandwidth
 
     return -logLike because we want to minimize this
     """
-    loglike = 0.
-
     truth = np.ones_like(samples, dtype=bool)
     N = len(samples)
+    loglike = []
     for _ in xrange(num_trials):
         truth[:] = True
         inds = np.random.randint(0, N, size=num_test)
         truth[inds] = False
-        loglike -= np.sum(logkde_pdf(samples[inds], samples[truth], bandwidth))/(N-np.sum(truth))
+        loglike.append( -np.sum(logkde_pdf(samples[inds], samples[truth], bandwidth))/(N-np.sum(truth)) )
 
-    loglike /= num_trials
-
-    return loglike
+    if return_std:
+        return np.mean(loglike), np.std(loglike)
+    else:
+        return np.mean(loglike)
 
 '''
 ### DEPRECATED: this is actually slower than logleave1outLikelihood for reasonable sample sizes
@@ -107,25 +175,25 @@ def fast_logleave1outLikelihood(bandwidth, samples, num_test, num_trials=10):
     return -summed_over_trials ### return the negative because we want to minimize this...
 '''
 
-def grad_logleave1outLikelihood(bandwidth, samples, num_test, num_trials=10):
+def grad_logleave1outLikelihood(bandwidth, samples, num_test, num_trials=10, return_std=False):
     """
     determine the gradient of the likelihood
 
     return -grad(logLike) becaues it needs to be consistent with logleave1outLikelihood
     """
-    grad_loglike = 0.
-
     truth = np.ones_like(samples, dtype=bool)
     N = len(samples)
+    grad_loglike = []
     for _ in xrange(num_trials):
         truth[:] = True
         inds = np.random.randint(0, N, size=num_test)
         truth[inds] = False
-        grad_loglike -= np.sum(grad_logkde_pdf(samples[inds], samples[truth], bandwidth))/(N-np.sum(truth))
+        grad_loglike.append( -np.sum(grad_logkde_pdf(samples[inds], samples[truth], bandwidth))/(N-np.sum(truth)) )
 
-    grad_loglike /= num_trials
-
-    return grad_loglike
+    if return_std:
+        return np.mean(grad_loglike), np.std(grad_loglike)
+    else:
+        return np.mean(grad_loglike)
 
 def fast_grad_logleave1outLikelihood(bandwidth, samples, num_test, num_trials=10):
     """

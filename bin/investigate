@@ -37,9 +37,9 @@ parser.add_option('', '--rtol', default=1e-3, type='float',
     help='tolerance used in numeric optimzation of bandwidth. \
 DEFAULT=1e-6')
 
-parser.add_option('', '--num-plot', default=101, type='int',
+parser.add_option('', '--num-plot', default=1001, type='int',
     help='the number of evaluation points used to produce KDE p(B) plot. \
-DEFAULT=101')
+DEFAULT=1001')
 
 parser.add_option('-o', '--output-dir', default='.', type='string')
 parser.add_option('-t', '--tag', default='', type='string')
@@ -106,32 +106,35 @@ fig.savefig(figname)
 
 ### find optimal bandwidth
 if opts.verbose:
-    print('finding optimal bandwidth for KDE estimate of p(B)')
-bandwidth = kde_inv.optimizeBandwidth(B, num_test=opts.num_test, num_trials=opts.num_trials, rtol=opts.rtol)
-#bandwidth = (0.01)**2
-if opts.verbose:
-    print('    bandwidth = %.6e'%bandwidth)
-
-# plot KDE smoothed version of p(B) histogram
-fig = plt.figure()
-ax = fig.gca()
-
-b = np.linspace(0, 2, opts.num_plot)
-ax.plot(b, np.exp(kde_inv.logkde_pdf(b, B, bandwidth)))
-ax.hist(B, bins=int(opts.num_samples**0.5), histtype='step', normed=True)
-
-ax.set_xlabel('B')
-ax.set_ylabel('KDE p(B)*N')
-
-ax.set_xlim(xmin=0, xmax=2)
-
-ax.grid(True, which='both')
-
-figname = '%s/kde_B%s.png'%(opts.output_dir, opts.tag)
+    print('generating likelihood vs. bandwidth plot')
+bandwidths = [
+    1e-5,
+    3e-5,
+    1e-4,
+    3e-4,
+    1e-3,
+    3e-3,
+    1e-2,
+    3e-2,
+    1e-1,
+    3e-1,
+#    1e0,
+]
+fig = kde_inv.likelihood_plot(B, bandwidths, opts.num_test, opts.num_trials, opts.num_plot, verbose=opts.verbose)
+figname = '%s/likelihood%s.png'%(opts.output_dir, opts.tag)
 if opts.verbose:
     print('    '+figname)
 fig.savefig(figname)
 plt.close(fig)
+
+if opts.verbose:
+    print('selecting bandwidth for the rest of the evaluation')
+bandwidth = (0.01)**2
+if opts.verbose:
+    print('    bandwidth = %.6e'%bandwidth)
+
+import sys
+sys.exit(0)
 
 print '''\
 FIXME: 
