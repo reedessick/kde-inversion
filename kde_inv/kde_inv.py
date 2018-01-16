@@ -140,11 +140,10 @@ def explicit_logleave1outLikelihood(bandwidth, samples, return_std=False):
     loglike = []
     truth = np.ones_like(samples, dtype=bool)
     N = len(samples)
-    n = N-1
     for i in xrange(N):
         truth[i-1] = True
         truth[i] = False
-        loglike.append( -np.sum(logkde_pdf(samples[i], samples[truth], bandwidth))/n )
+        loglike.append( -np.sum(logkde_pdf(samples[i], samples[truth], bandwidth)) )
     if return_std:
         return np.mean(loglike), np.std(loglike)
     else:
@@ -173,12 +172,11 @@ def grad_logleave1outLikelihood(bandwidth, samples, num_test, num_trials=10, ret
 def explicit_grad_logleave1outLikelihood(bandwidth, samples, return_std=False):
     truth = np.ones_like(samples, dtype=bool)
     N = len(samples)
-    n = N-1
     grad_loglike = []
     for i in xrange(N):
         truth[i-1] = True
         truth[i] = False
-        grad_loglike.append( -np.sum(grad_logkde_pdf(samples[i], samples[truth], bandwidth))/n )
+        grad_loglike.append( -np.sum(grad_logkde_pdf(samples[i], samples[truth], bandwidth)) )
 
     if return_std:
         return np.mean(grad_loglike), np.std(grad_loglike)
