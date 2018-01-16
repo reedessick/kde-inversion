@@ -26,20 +26,26 @@ parser.add_option('-v', '--verbose', default=False, action='store_true')
 
 parser.add_option('-n', '--num-samples', default=1000, type='int',
     help='DEFAULT=1000')
+parser.add_option('-N', '--num-samples-recovery', default=1000, type='int',
+    help='DEFAULT=1000')
 
-parser.add_option('', '--num-test', default=100, type='int', 
-    help='the number of samples used as the validation set in leave1outLikelihood. \
-DEFAULT=100')
-parser.add_option('', '--num-trials', default=1000, type='int',
-    help='the number of trials over which we average in leave1outLikelihood. \
-DEFAULT=1000')
-parser.add_option('', '--rtol', default=1e-3, type='float',
-    help='tolerance used in numeric optimzation of bandwidth. \
-DEFAULT=1e-6')
+#parser.add_option('', '--num-test', default=100, type='int', 
+#    help='the number of samples used as the validation set in leave1outLikelihood. \
+#DEFAULT=100')
+#parser.add_option('', '--num-trials', default=1000, type='int',
+#    help='the number of trials over which we average in leave1outLikelihood. \
+#DEFAULT=1000')
+#parser.add_option('', '--rtol', default=1e-3, type='float',
+#    help='tolerance used in numeric optimzation of bandwidth. \
+#DEFAULT=1e-6')
+
+parser.add_option('', '--bandwidth', default=1e-3, type='float',
+    help='the bandwidth used when attempting to recover p(A) from samples~p(B)')
 
 parser.add_option('', '--num-plot', default=1001, type='int',
     help='the number of evaluation points used to produce KDE p(B) plot. \
 DEFAULT=1001')
+parser.add_option('', '--colormap', default='jet', type='string')
 
 parser.add_option('-o', '--output-dir', default='.', type='string')
 parser.add_option('-t', '--tag', default='', type='string')
@@ -120,51 +126,84 @@ bandwidths = [
     3e-1,
 #    1e0,
 ]
-fig = kde_inv.likelihood_plot(B, bandwidths, opts.num_test, opts.num_trials, opts.num_plot, verbose=opts.verbose)
+#fig = kde_inv.likelihood_plot(B, bandwidths, opts.num_test, opts.num_trials, opts.num_plot, verbose=opts.verbose)
+fig = kde_inv.explicit_likelihood_plot(np.concatenate((B, -B, 4-B)), bandwidths, opts.num_plot, verbose=opts.verbose)
 figname = '%s/likelihood%s.png'%(opts.output_dir, opts.tag)
 if opts.verbose:
     print('    '+figname)
 fig.savefig(figname)
 plt.close(fig)
 
-if opts.verbose:
-    print('selecting bandwidth for the rest of the evaluation')
-bandwidth = (0.01)**2
-if opts.verbose:
-    print('    bandwidth = %.6e'%bandwidth)
-
-import sys
-sys.exit(0)
-
-print '''\
-FIXME: 
-    look for convergence as the number of samples grows...
-    perhaps just repeat this in a loop adding starting with 10 samples and scaling up to all samples in B
-    depending on how quickly the optimization runs, do this for each sample, or only ever 10 samples? logarithmically spaced?
-'''
-
 #------------------------
 
 ### try to recover p(A) via kde_inversion
+if opts.verbose:
+    print('computing the measure associated with mapping A->B\nEssentially, an over-counting factor associated with mapping multiple values of A into the same value of B')
+Asamples = kde_inv.drawA(opts.num_samples_recovery)
+
+Bsamples = np.random.random(opts.num_samples)*2 ### just draw uniformly from the B distribution...
+#Bsamples = B[:]
+
+### enforce periodic/reflecting boundary conditions
+Bsamples = np.concatenate((Bsamples, -Bsamples, 4-Bsamples))
+
+weights = np.exp(kde_inv.compute_weights(Asamples, Bsamples, opts.bandwidth))
+
+m=np.min(weights)
+M=np.max(weights)
+dM=M-m
+if opts.verbose:
+    print('    min(weights)=%.3e'%m)
+    print('    max(weights)=%.3e'%M)
+
+# generate figure
+if opts.verbose:
+    print('plotting...')
+fig = plt.figure()
+ax = fig.gca()
+
+cmap = plt.get_cmap(opts.colormap)
+for a, weight in zip(Asamples.transpose(), weights):
+    ax.scatter(a[0], a[1], color=cmap((weight-m)/dM), s=1)
+ax.set_xlabel('A[0]')
+ax.set_ylabel('A[1]')
+
+ax.set_xlim(xmin=0, xmax=1)
+ax.set_ylim(ymin=0, ymax=1)
+
+ax.grid(True, which='both')
+
+figname = "%s/measure_A%s.png"%(opts.output_dir, opts.tag)
+if opts.verbose:
+    print('    '+figname)
+fig.savefig(figname)
+plt.close(fig)
+
+#------------------------
+
+### compute distance from known distribution...
 raise NotImplementedError, '''\
 try to recover a distribution over A assuming L(data|B)~constant
     should reproduce p(A), compare with kde_inv.kldiv
+
+ -> draw more samples: A_i~p(A)
+ -> for each A_i~p(A), compute B_i = mapA2B(A_i)
+        compute w_i = KDE(B_i, B_j~p(B); bandwidth) (and store it in association with A_i)
+ -> look at the distribution of w_i in A-space (a plot)
+   -> scatter plot in A-space with alpha-values weighted by w_i?
+   -> weighted 2-D histogram in A-space?
+   -> weighted KDE histogram in A-space?
+ -> compute KL divergence between known function for p(A) and recovered estimate based on w_i
 '''
 
 #------------------------
 
 ### implement some non-trivial likelihood over B and infer the posterior over A
+if opts.verbose:
+    print('attempting to recover p(A|data) from samples~p(B|data) and KDE with bandwidth=%.3e'%bandwidth)
 raise NotImplementedError, '''\
-implement some non-trivial likelihood over B and infer the posterior over A
+implement some non-trivial likelihood over B (a relatively narrow Guassian?) and infer the posterior over A
     try a relatively tight Gaussian in B as the likelihood -> should pick out a sinusoidal region of A-space
     sample from this, don't use the analytic result
     compare this to the posterior achieved via direct sampling (grid based? MCMC?)
-'''
-
-#------------------------
-
-### implement some non-trivial posterior samples over B and infer the posterior over A
-raise NotImplementedError, '''\
-sample from some non-trivial posterior and then recover p(A|data) from those samples
-    demonstrating this functionality and scalability should serve as a sufficient proof-of-concept
 '''

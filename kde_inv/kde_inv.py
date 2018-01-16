@@ -29,6 +29,7 @@ def mapA2B(A):
     for A[0], A[1] \in [0, 1]
     """
     return A[0] + np.cos(4*np.pi*A[1])**2
+#    return 2*np.sin(2*np.pi*A[0])**2
 
 #-------------------------------------------------
 
@@ -69,12 +70,70 @@ def likelihood_plot(samples, bandwidths, num_test, num_trials, num_plot=101, ver
         if verbose:
             print('bandwidth=%.3e'%bandwidth)
             print('    computing logL')
-#        logL, sigma_logL = logleave1outLikelihood(bandwidth, samples, num_test, num_trials, return_std=True)
+        logL, sigma_logL = logleave1outLikelihood(bandwidth, samples, num_test, num_trials, return_std=True)
+
+        if verbose:
+            print('    computing grad_logL')
+        gradlogL, sigma_gradlogL = grad_logleave1outLikelihood(bandwidth, samples, num_test, num_trials, return_std=True)
+
+        if verbose:
+            print('    plotting')
+        color = ax_logL.semilogx([bandwidth]*2, [logL-sigma_logL, logL+sigma_logL], alpha=0.5)[0].get_color()
+        ax_logL.semilogx(bandwidth, logL, marker='o', color=color)
+
+        ax_gradlogL.semilogx([bandwidth]*2, [bandwidth*(gradlogL-sigma_gradlogL), bandwidth*(gradlogL+sigma_gradlogL)], alpha=0.5, color=color)
+        ax_gradlogL.semilogx(bandwidth, gradlogL*bandwidth, marker='o', color=color)
+
+        ax_hist.plot(b, np.exp(logkde_pdf(b, samples, bandwidth)), label='bandwidth=%.3e'%bandwidth, alpha=0.5, color=color)
+
+        fig.savefig('tmp.png')
+
+#    ax_hist.legend(loc='best')
+    os.remove('tmp.png')
+
+    return fig
+
+def explicit_likelihood_plot(samples, bandwidths, num_plot=101, verbose=False):
+    """
+    returns a figure showing the estimates for likelihood, grad_likelihood, and KDE representations of the histograms
+    """
+    ### set up figures and axes
+    fig = plt.figure()
+    ax_logL = plt.subplot(2, 2, 1)
+    ax_gradlogL = plt.subplot(2, 2, 3)
+    ax_hist = plt.subplot(1, 2, 2)
+
+    ax_logL.set_xlabel('bandwidth')
+    ax_logL.set_ylabel('logL')
+
+    ax_gradlogL.set_xlabel('bandwidth')
+    ax_gradlogL.set_ylabel('d(logL)/d(logbandwidth)')
+
+    ax_hist.set_xlabel('B')
+    ax_hist.set_ylabel('p(B)')
+    ax_hist.set_xlim(xmin=0, xmax=2)
+
+    for ax in [ax_logL, ax_gradlogL, ax_hist]:
+        ax.grid(True, which='both')
+
+    xlim = min(bandwidths)/1.1, max(bandwidths)*1.1
+    for ax in [ax_logL, ax_gradlogL]:
+        ax.set_xlim(xlim)
+
+    ### generate histogram over samples
+    N = len(samples)
+    ax_hist.hist(samples, bins=int(N**0.5), histtype='step', normed=True, label='samples', color='k', linewidth=2)
+
+    ### iterate over bandwidths, adding to plots as we go
+    b = np.linspace(0, 2, num_plot)
+    for bandwidth in bandwidths:
+        if verbose:
+            print('bandwidth=%.3e'%bandwidth)
+            print('    computing logL')
         logL, sigma_logL = explicit_logleave1outLikelihood(bandwidth, samples, return_std=True)
 
         if verbose:
             print('    computing grad_logL')
-#        gradlogL, sigma_gradlogL = grad_logleave1outLikelihood(bandwidth, samples, num_test, num_trials, return_std=True)
         gradlogL, sigma_gradlogL = explicit_grad_logleave1outLikelihood(bandwidth, samples, return_std=True)
 
         if verbose:
@@ -111,6 +170,28 @@ def optimizeBandwidth(samples, num_test=100, num_trials=10, rtol=1e-3, method='N
         args=(samples, num_test, num_trials),
         tol=rtol,
         jac=grad_logleave1outLikelihood,
+        method=method,
+    )
+    assert res.success, 'minimization did not complete succesfully!'
+    return res.x ### return the optimal bandwidth
+
+def optimizeBandwidth(samples, num_test=100, num_trials=10, rtol=1e-3, method='Newton-CG'):
+    """
+    find the optimal bandwidth to describe samples with a Gaussian KDE via leave-one-out cross validation
+
+    bisection search with starting boundary points as the closest distance between 2 samples and the furthest distance between 2 samples?
+    """
+    ### find starting points for bandwidth search
+    order = samples.argsort() ### smallest to largest
+    bandwidth = np.mean(samples[order][1:]-samples[order][:-1])
+
+    ### delegate for minimization
+    res = minimize(
+        explicit_logleave1outLikelihood,
+        bandwidth,
+        args=(samples,),
+        tol=rtol,
+        jac=explicit_grad_logleave1outLikelihood,
         method=method,
     )
     assert res.success, 'minimization did not complete succesfully!'
@@ -214,3 +295,13 @@ def kldiv(samples, foo):
     will be used to measure how well we can recover a distribution
     """
     raise NotImplementedError
+
+#-------------------------------------------------
+
+def compute_weights(Asamples, Bsamples, bandwidth):
+    """
+    computes the weights for Asamples based on Bsamples~p(B)
+
+    NOTE: this returns log(prob), not prob
+    """
+    return logkde_pdf(mapA2B(Asamples), Bsamples, bandwidth)
